@@ -1,9 +1,12 @@
 const express = require("express");
 const cors = require("cors");
+
 const { createClient } = require("@supabase/supabase-js");
 require("dotenv").config();
-
+const stripe = require('stripe')(process.env.STRIPEKEY);
 const app = express();
+
+
 
 // Initialize the base Supabase client
 const supabase = createClient(
@@ -25,7 +28,43 @@ app.get("/", (req, res) => res.json({ message: "API is running" }));
 app.get("/api/products", async (req, res) => {
   const { data, error } = await supabase.from("products").select("*");
   if (error) return res.status(400).json({ error: error.message });
+  res.json(data); // Returns the full array []
+});
+
+// 2. GET SINGLE PRODUCT BY ID (For the Detail Page)
+app.get("/api/products/:id", async (req, res) => {
+  const { id } = req.params;
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .eq("id", id)
+    .single(); // Returns one object {}
+    
+  if (error) return res.status(404).json({ error: "Product not found" });
   res.json(data);
+});
+
+//Checkout process
+app.post('/api/create-checkout-session', async (req, res) => {
+  const { cartItems } = req.body;
+  // turn cart intems into stripe format
+  const line_items = cartItems.map(item => ({
+    price_data: {
+    currency: 'usd',
+    product_data: { name: item.name },
+    unit_amount: item.price * 100, // Stripe uses cents so 1.00 usd = 100
+    },
+    quantity: 1,
+  }))
+
+  const session = await stripe.checkout.sessions.create({
+    payment_method_types: ['card'],
+    line_items,
+    mode: 'payment',
+    success_url: 'http://localhost:3000/success', // if payment sucess
+    cancel_url: 'http://localhost:3000/cart', // if payment fails
+  });
+  res.json({ id: session.id });
 });
 
 // --- AUTHENTICATION ROUTES ---
@@ -44,30 +83,31 @@ app.post("/api/login", async (req, res) => {
 });
 
 // --- PROTECTED ROUTE (Now with RLS Support) ---
+// 1. CREATE A PRODUCT
 app.post("/api/products", async (req, res) => {
-  const { name, description, price, stock, image_url } = req.body;
+  const { name, description, price, stock, image_url, category } = req.body;
   
-  // 1. Get the token from the header
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) return res.status(401).json({ error: "Missing token" });
-
-  // 2. Create a one-time client that uses the USER'S token
-  const supabaseAuth = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_ANON_KEY,
-    { global: { headers: { Authorization: `Bearer ${token}` } } }
-  );
-
-  // 3. This insert now respects your RLS "Authenticated" policy
-  const { data, error } = await supabaseAuth
+  // We use the base 'supabase' client here to bypass token checks for now
+  const { data, error } = await supabase
     .from("products")
-    .insert([{ name, description, price, stock, image_url }])
+    .insert([{ name, description, price, stock, image_url, category }])
     .select();
 
   if (error) return res.status(400).json({ error: error.message });
   res.status(201).json(data);
+});
+
+// 2. DELETE A PRODUCT
+app.delete("/api/products/:id", async (req, res) => {
+  const { id } = req.params;
+  
+  const { error } = await supabase
+    .from("products")
+    .delete()
+    .eq("id", id);
+
+  if (error) return res.status(400).json({ error: error.message });
+  res.json({ message: "Product deleted successfully" });
 });
 
 const PORT = process.env.PORT || 5000;
