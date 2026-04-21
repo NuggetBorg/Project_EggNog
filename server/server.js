@@ -1,6 +1,5 @@
 const express = require("express");
 const cors = require("cors");
-app.use(cors());
 
 const { createClient } = require("@supabase/supabase-js");
 require("dotenv").config();
@@ -15,11 +14,7 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 
-app.use(cors({
-  origin: "http://localhost:3000", // Allow your React app
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"] // Essential for tokens!
-}));
+app.use(cors());
 app.use(express.json());
 
 
@@ -62,9 +57,9 @@ app.post('/api/create-checkout-session', async (req, res) => {
     payment_method_types: ['card'],
     line_items,
     mode: 'payment',
-    success_url: 'http://localhost:3000/success', // if payment sucess
-    cancel_url: 'http://localhost:3000/cart', // if payment fails
-  });
+    success_url: `${req.headers.origin}/success`, 
+    cancel_url: `${req.headers.origin}/cart`,
+});
   res.json({ id: session.id });
 });
 
