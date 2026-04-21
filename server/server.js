@@ -106,8 +106,8 @@ app.delete("/api/products/:id", async (req, res) => {
   res.json({ message: "Product deleted successfully" });
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+//const PORT = process.env.PORT || 5000;
+module.exports = app; // Add this instead
 app.post("/api/products/deduct-stock", async (req, res) => {
   const { cartItems } = req.body;
 
