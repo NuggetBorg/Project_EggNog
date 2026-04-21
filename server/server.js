@@ -112,3 +112,69 @@ app.delete("/api/products/:id", async (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.post("/api/products/deduct-stock", async (req, res) => {
+  const { cartItems } = req.body;
+
+  try {
+    for (const item of cartItems) {
+      // Fetch current stock first
+      const { data: p } = await supabase
+        .from("products")
+        .select("stock")
+        .eq("id", item.id)
+        .single();
+
+      if (p) {
+        // Subtract 1 and update
+        const newStock = Math.max(0, p.stock - 1);
+        await supabase
+          .from("products")
+          .update({ stock: newStock })
+          .eq("id", item.id);
+      }
+    }
+    res.json({ message: "Stock updated successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+app.put("/api/products/:id", async (req, res) => {
+  const { id } = req.params;
+  const { stock } = req.body;
+
+  const { data, error } = await supabase
+    .from("products")
+    .update({ stock: stock })
+    .eq("id", id)
+    .select();
+
+  if (error) return res.status(400).json({ error: error.message });
+  res.json(data);
+});
+// --- ADMIN ORDER MANAGEMENT ---
+
+// 1. Get ALL orders from EVERYONE (Admin only logic)
+app.get("/api/admin/orders", async (req, res) => {
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) return res.status(400).json({ error: error.message });
+  res.json(data);
+});
+
+// 2. Update the status of an order (e.g., Pending -> Shipped)
+app.put("/api/admin/orders/:id/status", async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  const { data, error } = await supabase
+    .from("orders")
+    .update({ status: status })
+    .eq("id", id)
+    .select();
+
+  if (error) return res.status(400).json({ error: error.message });
+  res.json(data);
+});

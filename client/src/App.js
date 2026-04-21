@@ -3,232 +3,318 @@ import { BrowserRouter as Router, Routes, Route, Link, useParams } from 'react-r
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
 
+// --- CONFIGURATION & GLOBALS ---
+
+// Initialize Supabase connection
 const supabase = createClient(
-  'https://jvqachvrbkvrsrseyyoh.supabase.co', 
+  'https://jvqachvrbkvrsrseyyoh.supabase.co',
   'sb_publishable_rjBRgV9S-9jP0_07XI1xYg_s0FCJSPs'
 );
 
-// --- COMPONENT 1: PRODUCT DETAIL PAGE ---
+// Centralized API URL and Theme Colors to make changes easy later
+const API_BASE = 'http://localhost:5000/api';
+const COLORS = {
+  primary: '#BE1E2D',   // FSU Red
+  secondary: '#FFD700', // Gold
+  dark: '#333333',
+  light: '#f4f4f4',
+  white: '#ffffff',
+  text: '#444'
+};
+
+// Reusable UI styles to avoid repeating CSS in every component
+const styles = {
+  container: { padding: '40px', maxWidth: '1200px', margin: '0 auto', fontFamily: '"Segoe UI", sans-serif' },
+  card: { border: '1px solid #eee', padding: '20px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' },
+  button: { padding: '12px 24px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold' },
+  nav: { padding: '15px 5%', backgroundColor: COLORS.dark, color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 1000 },
+  input: { padding: '10px', marginBottom: '10px', borderRadius: '6px', border: '1px solid #ddd', width: '100%' }
+};
+
+// --- COMPONENTS ---
+
+/**
+ * PRODUCT DETAIL: Shows a single item's full info based on the URL ID
+ */
 function ProductDetail({ addToCart }) {
-  const { id } = useParams(); // Gets the ID from the URL
+  const { id } = useParams(); // Grabs the ID from /product/:id
   const [product, setProduct] = useState(null);
 
   useEffect(() => {
-    const fetchSingleProduct = async () => {
-      try {
-        const res = await axios.get(`http://localhost:5000/api/products/${id}`);
-        setProduct(res.data);
-      } catch (err) {
-        console.error("Error fetching single product:", err);
-      }
-    };
-    fetchSingleProduct();
+    // Fetch only the specific product for this page
+    axios.get(`${API_BASE}/products/${id}`).then(res => setProduct(res.data)).catch(console.error);
   }, [id]);
 
-  if (!product) return <div style={{ padding: '40px' }}>Loading FSU Gear...</div>;
+  if (!product) return <div style={styles.container}>Loading FSU Gear...</div>;
 
   return (
-    <div style={{ padding: '40px', maxWidth: '800px', margin: '0 auto' }}>
-      <Link to="/" style={{ color: '#BE1E2D', fontWeight: 'bold' }}>← Back to All Merch</Link>
-      <div style={{ display: 'flex', gap: '40px', marginTop: '20px' }}>
-        <img src={product.image_url} alt={product.name} style={{ width: '300px', borderRadius: '15px' }} />
-        <div>
+    <div style={styles.container}>
+      <Link to="/" style={{ color: COLORS.primary, textDecoration: 'none', fontWeight: 'bold' }}>← Back to All Merch</Link>
+      <div style={{ display: 'flex', gap: '50px', marginTop: '30px', flexWrap: 'wrap' }}>
+        <img src={product.image_url} alt={product.name} style={{ width: '100%', maxWidth: '400px', borderRadius: '20px' }} />
+        <div style={{ flex: 1 }}>
+          <span style={{ color: '#888', textTransform: 'uppercase' }}>{product.category}</span>
           <h1>{product.name}</h1>
-          <p style={{ textTransform: 'uppercase', color: '#666' }}>{product.category}</p>
-          <p style={{ fontSize: '18px', lineHeight: '1.6' }}>{product.description}</p>
-          <h2 style={{ color: '#BE1E2D' }}>${product.price}</h2>
-          <p><strong>Availability:</strong> {product.stock > 0 ? `In Stock (${product.stock})` : 'Out of Stock'}</p>
-            <button 
+          <p style={{ fontSize: '1.1rem', color: COLORS.text, lineHeight: '1.6' }}>{product.description}</p>
+          <h2 style={{ color: COLORS.primary }}>${product.price}</h2>
+          {/* Visual Stock indicator */}
+          <p>Status: <strong style={{ color: product.stock > 0 ? 'green' : 'red' }}>
+            {product.stock > 0 ? `In Stock (${product.stock})` : 'Out of Stock'}
+          </strong></p>
+          <button 
             onClick={() => addToCart(product)} 
-            style={{ padding: '15px 30px', backgroundColor: '#333', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}
-            >
-           Add to Cart
-           </button>
+            disabled={product.stock <= 0} // Disable button if out of stock
+            style={{ ...styles.button, backgroundColor: product.stock > 0 ? COLORS.dark : '#ccc', color: 'white', width: '250px' }}>
+            {product.stock > 0 ? 'Add to Cart' : 'Sold Out'}
+          </button>
         </div>
       </div>
     </div>
   );
-  
 }
 
-
+/**
+ * CART: Lists items and handles the Stripe Checkout redirect
+ */
 function Cart({ cart, clearCart }) {
   const total = cart.reduce((sum, item) => sum + item.price, 0);
 
   const handleCheckout = async () => {
     try {
-
-      const res = await axios.post('http://localhost:5000/api/create-checkout-session', {
-        cartItems: cart
-      });
-
-      const { id } = res.data;
-
+      // 1. Tell our backend to create a Stripe session
+      const res = await axios.post(`${API_BASE}/create-checkout-session`, { cartItems: cart });
+      // 2. Use the session ID to send the user to Stripe's payment page
       const stripe = window.Stripe('pk_test_51THmjhP4YAzW1hPFvkdQnhSUh7V0lG2smAfG9bTK7VYD0DFXBxSMcxB83hJ6UREUDZgSrhDd4pDvQlV6E2k0tZDT00aOGmNB6v');
-      await stripe.redirectToCheckout({ sessionId: id });
-
-    } catch (err) {
-      console.error("Checkout Error: ", err);
-      alert("Checkout failed");
-    }
+      await stripe.redirectToCheckout({ sessionId: res.data.id });
+    } catch (err) { alert("Checkout failed"); }
   };
 
   return (
-    <div style={{ padding: '40px', maxWidth: '800px', margin: '0 auto' }}>
+    <div style={styles.container}>
       <h1>Your Shopping Cart</h1>
       {cart.length === 0 ? (
-        <p>Your cart is empty dumbahh. <Link to="/">Go get yourself some drip bud!</Link></p>
+        <p>Your cart is empty. <Link to="/">Go get yourself some drip!</Link></p>
       ) : (
-        <>
-          <div style={{ borderTop: '1px solid #ddd' }}>
-            {cart.map((item, index) => (
-              <div key={index} style={{ display: 'flex', justifyContent: 'space-between', padding: '15px 0', borderBottom: '1px solid #eee' }}>
-                <span>{item.name}</span>
-                <strong>${item.price.toFixed(2)}</strong>
-              </div>
-            ))}
-          </div>
-          <div style={{ textAlign: 'right', marginTop: '20px' }}>
+        <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px' }}>
+          {cart.map((item, index) => (
+            <div key={index} style={{ display: 'flex', justifyContent: 'space-between', padding: '15px 0', borderBottom: '1px solid #eee' }}>
+              <span>{item.name}</span>
+              <strong>${item.price.toFixed(2)}</strong>
+            </div>
+          ))}
+          <div style={{ textAlign: 'right', marginTop: '30px' }}>
             <h3>Total: ${total.toFixed(2)}</h3>
-            <button onClick={clearCart} style={{ backgroundColor: '#ccc', padding: '10px', marginRight: '10px', border: 'none', cursor: 'pointer' }}>
-              Clear Cart
-            </button>
-            <button 
-              onClick={handleCheckout}
-              style={{ backgroundColor: '#BE1E2D', color: 'white', padding: '10px 20px', border: 'none', cursor: 'pointer' }}>
-              Checkout
-            </button>
+            <button onClick={clearCart} style={{ ...styles.button, backgroundColor: '#eee', marginRight: '10px' }}>Clear</button>
+            <button onClick={handleCheckout} style={{ ...styles.button, backgroundColor: COLORS.primary, color: 'white' }}>Proceed to Checkout</button>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
 }
 
+/**
+ * ADMIN PANEL COMPONENT
+ * Handles: 
+ * 1. Product Creation
+ * 2. Inventory Management (Stock Updates & Deletion)
+ * 3. Customer Order Tracking & Status Updates
+ */
 function AdminPanel() {
+  // --- STATE MANAGEMENT ---
   const [products, setProducts] = useState([]);
-  const [newProduct, setNewProduct] = useState({ name: '', price: '', category: '', image_url: '', description: '', stock: 0 });
+  const [allOrders, setAllOrders] = useState([]);
+  const [newProduct, setNewProduct] = useState({ 
+    name: '', price: '', category: '', image_url: '', description: '', stock: 0 
+  });
+  const [editStock, setEditStock] = useState({}); // Temporary storage for stock input changes
 
-  // 1. Fetch products so we can delete them
+  // Load data as soon as the component mounts
   useEffect(() => {
-    fetchProducts();
+    refreshData();
   }, []);
 
-  const fetchProducts = async () => {
-    const res = await axios.get('http://localhost:5000/api/products');
-    setProducts(res.data);
+  const refreshData = () => {
+    fetchProducts();
+    fetchAllOrders();
   };
 
-  // 2. Handle adding a new product
+  // --- API CALLS ---
+
+  const fetchProducts = () => {
+    axios.get(`${API_BASE}/products`)
+      .then(res => setProducts(res.data))
+      .catch(err => console.error("Error fetching products:", err));
+  };
+
+  const fetchAllOrders = () => {
+    axios.get(`${API_BASE}/admin/orders`)
+      .then(res => setAllOrders(res.data))
+      .catch(err => console.error("Error fetching orders:", err));
+  };
+
   const handleAddProduct = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:5000/api/products', newProduct);
-      alert("Product Added!");
-      fetchProducts(); // Refresh list
+      await axios.post(`${API_BASE}/products`, newProduct);
+      alert("Success: Product added to catalog!");
       setNewProduct({ name: '', price: '', category: '', image_url: '', description: '', stock: 0 });
-    } catch (err) { console.error(err); }
+      fetchProducts();
+    } catch (err) { alert("Error adding product."); }
   };
 
-  // 3. Handle deleting a product
-  const handleDelete = async (id) => {
-    if (window.confirm("Delete this item?")) {
-      await axios.delete(`http://localhost:5000/api/products/${id}`);
+  const handleUpdateStock = async (id) => {
+    const newVal = editStock[id];
+    if (newVal === undefined) return alert("Enter a number first");
+    try {
+      await axios.put(`${API_BASE}/products/${id}`, { stock: parseInt(newVal) });
+      alert("Inventory updated!");
+      fetchProducts();
+    } catch (err) { alert("Update failed."); }
+  };
+
+  const handleUpdateStatus = async (orderId, newStatus) => {
+    try {
+      await axios.put(`${API_BASE}/admin/orders/${orderId}/status`, { status: newStatus });
+      fetchAllOrders(); // Refresh list to show new status
+    } catch (err) { alert("Failed to update status."); }
+  };
+
+  const handleDeleteProduct = async (id) => {
+    if (window.confirm("Are you sure you want to remove this item permanently?")) {
+      await axios.delete(`${API_BASE}/products/${id}`);
       fetchProducts();
     }
   };
 
+  // --- RENDER ---
   return (
-    <div style={{ padding: '40px' }}>
-      <h2>Admin: Manage Inventory</h2>
-      
-      {/* ADD PRODUCT FORM */}
-      <form onSubmit={handleAddProduct} style={{ marginBottom: '40px', border: '1px solid #ddd', padding: '20px' }}>
-        <h3>Add New Gear</h3>
-        <input placeholder="Name" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required /><br/>
-        <input placeholder="Price" type="number" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: parseFloat(e.target.value)})} required /><br/>
-        <input 
-          placeholder="Stock" 
-          type="number" 
-        value={newProduct.stock} 
-        onChange={e => setNewProduct({...newProduct, stock: parseInt(e.target.value) || 0})} 
-        required 
-      /><br/>
-        <input placeholder="Category" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})} /><br/>
-        <input placeholder="Image URL" value={newProduct.image_url} onChange={e => setNewProduct({...newProduct, image_url: e.target.value})} /><br/>
-        <textarea placeholder="Description" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} /><br/>
-        <button type="submit">Upload Product</button>
-      </form>
+    <div style={styles.container}>
+      <h1 style={{ color: COLORS.primary, borderBottom: `3px solid ${COLORS.primary}`, paddingBottom: '10px' }}>
+        Management Dashboard
+      </h1>
 
-      {/* PRODUCT LIST FOR DELETION */}
-      <h3>Current Inventory</h3>
-      {products.map(p => (
-        <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px', borderBottom: '1px solid #eee' }}>
-          <span>{p.name} - ${p.price}</span>
-          <button onClick={() => handleDelete(p.id)} style={{ color: 'red' }}>Delete</button>
+      {/* SECTION 1: ADD NEW PRODUCT */}
+      <section style={{ marginBottom: '50px' }}>
+        <div style={{ ...styles.card, backgroundColor: '#fff' }}>
+          <h2 style={{ marginTop: 0 }}>Add New Product</h2>
+          <form onSubmit={handleAddProduct} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+            <input style={styles.input} placeholder="Product Name" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required />
+            <input style={styles.input} placeholder="Price ($)" type="number" step="0.01" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: parseFloat(e.target.value)})} required />
+            <input style={styles.input} placeholder="Current Stock" type="number" value={newProduct.stock} onChange={e => setNewProduct({...newProduct, stock: parseInt(e.target.value)})} required />
+            <input style={styles.input} placeholder="Category (e.g. Hoodies)" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})} />
+            <input style={{ ...styles.input, gridColumn: '1 / span 2' }} placeholder="Image URL" value={newProduct.image_url} onChange={e => setNewProduct({...newProduct, image_url: e.target.value})} />
+            <textarea style={{ ...styles.input, gridColumn: '1 / span 2', minHeight: '80px' }} placeholder="Product Description" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} />
+            <button type="submit" style={{ ...styles.button, backgroundColor: COLORS.dark, color: 'white', gridColumn: '1 / span 2' }}>
+              Save Product to Catalog
+            </button>
+          </form>
         </div>
-      ))}
+      </section>
+
+      {/* SECTION 2: INVENTORY TABLE */}
+      <section style={{ marginBottom: '50px' }}>
+        <h3>Current Inventory</h3>
+        <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+          <thead>
+            <tr style={{ backgroundColor: COLORS.dark, color: 'white', textAlign: 'left' }}>
+              <th style={{ padding: '12px' }}>Product</th>
+              <th>Price</th>
+              <th>Stock</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {products.map(p => (
+              <tr key={p.id} style={{ borderBottom: '1px solid #ddd' }}>
+                <td style={{ padding: '12px' }}>{p.name}</td>
+                <td>${p.price}</td>
+                <td>
+                  <input 
+                    type="number" 
+                    defaultValue={p.stock} 
+                    style={{ width: '60px', padding: '5px' }} 
+                    onChange={e => setEditStock({...editStock, [p.id]: e.target.value})} 
+                  />
+                </td>
+                <td>
+                  <button onClick={() => handleUpdateStock(p.id)} style={{ color: 'green', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Update</button>
+                  <button onClick={() => handleDeleteProduct(p.id)} style={{ color: COLORS.primary, background: 'none', border: 'none', cursor: 'pointer', marginLeft: '15px' }}>Delete</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
+      {/* SECTION 3: ORDER MANAGEMENT */}
+      <section>
+        <h3>Customer Orders</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          {allOrders.length === 0 ? <p>No orders placed yet.</p> : allOrders.map(order => (
+            <div key={order.id} style={{ ...styles.card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fdfdfd' }}>
+              <div>
+                <p><strong>Order ID:</strong> #{order.id}</p>
+                <p><strong>Items:</strong> {order.items.map(i => i.name).join(', ')}</p>
+                <p><strong>Total:</strong> ${order.total_amount.toFixed(2)}</p>
+                <p style={{ fontSize: '0.8rem', color: '#666' }}>Placed: {new Date(order.created_at).toLocaleString()}</p>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <p>Status: <strong style={{ color: order.status === 'Shipped' ? 'green' : '#e67e22' }}>{order.status || 'Pending'}</strong></p>
+                <select 
+                  defaultValue={order.status || 'Pending'} 
+                  onChange={(e) => handleUpdateStatus(order.id, e.target.value)}
+                  style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                >
+                  <option value="Pending">Pending</option>
+                  <option value="Processing">Processing</option>
+                  <option value="Shipped">Shipped</option>
+                  <option value="Delivered">Delivered</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
-
-// --- COMPONENT 2: HOME PAGE (The Grid) ---
-function Home({ addToCart}) {
+/**
+ * HOME: The storefront. Handles product fetching and the search bar.
+ */
+function Home({ addToCart }) {
   const [products, setProducts] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-      const res = await axios.get('http://localhost:5000/api/products');
-      console.log("Full API Response:", res); // Check the structure
-      
-      // If res.data is an array, set it. Otherwise, set an empty array.
-      setProducts(Array.isArray(res.data) ? res.data : []); 
-    } catch (err) {
-      console.error("Error fetching products:", err);
-      setProducts([]); // Fallback so the app doesn't break
-    }
-    };
-    fetchProducts();
-    
+    // Get products and ensure we handle empty arrays gracefully
+    axios.get(`${API_BASE}/products`).then(res => setProducts(Array.isArray(res.data) ? res.data : [])).catch(() => setProducts([]));
   }, []);
 
-  const filteredProducts = products.filter(p => {
-  const name = p.name?.toLowerCase() || "";
-  const category = p.category?.toLowerCase() || "";
-  const search = searchTerm.toLowerCase();
-
-  return name.includes(search) || category.includes(search);
-  });
+  // Filter products by name or category based on user typing
+  const filtered = products.filter(p => (p.name + p.category).toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    
-    <div style={{ padding: '40px' }}>
-      <h1 style={{ textAlign: 'center', color: '#BE1E2D' }}>FSU Bobcat Shop</h1>
-      <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+    <div style={styles.container}>
+      <header style={{ textAlign: 'center', marginBottom: '50px' }}>
+        <h1 style={{ fontSize: '3rem', color: COLORS.primary }}>FSU Bobcat Shop</h1>
         <input 
           type="text" 
-          placeholder="Search FSU gear..." 
-          style={{ width: '50%', padding: '12px', borderRadius: '25px' }}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="Search gear..." 
+          style={{ ...styles.input, width: '60%', borderRadius: '30px', padding: '15px 25px', marginTop: '20px' }} 
+          onChange={(e) => setSearchTerm(e.target.value)} 
         />
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '20px' }}>
-        {filteredProducts.map(product => (
-          <div key={product.id} style={{ border: '1px solid #ddd', padding: '15px', borderRadius: '10px' }}>
-            <img src={product.image_url} alt={product.name} style={{ width: '100%' }} />
+      </header>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '30px' }}>
+        {filtered.map(product => (
+          <div key={product.id} style={styles.card}>
+            <img src={product.image_url} alt={product.name} style={{ width: '100%', height: '200px', objectFit: 'cover', borderRadius: '8px' }} />
             <h3>{product.name}</h3>
-            <p>${product.price}</p>
-            {/* THIS LINK CONNECTS THE PAGES */}
-            <button 
-              onClick={() => addToCart(product)} 
-              style={{ width: '100%', marginBottom: '10px', cursor: 'pointer' }}>
-                Add To Cart
-              </button>
-            <Link to={`/product/${product.id}`} style={{ textDecoration: 'none', color: '#BE1E2D', fontWeight: 'bold' }}>
-              View Details →
-            </Link>
+            <p style={{ color: COLORS.primary, fontWeight: 'bold' }}>${product.price}</p>
+            <button onClick={() => addToCart(product)} style={{ ...styles.button, width: '100%', backgroundColor: COLORS.dark, color: 'white' }}>Add To Cart</button>
+            <Link to={`/product/${product.id}`} style={{ textDecoration: 'none', color: COLORS.primary, display: 'block', textAlign: 'center', marginTop: '10px' }}>View Details →</Link>
           </div>
         ))}
       </div>
@@ -236,242 +322,128 @@ function Home({ addToCart}) {
   );
 }
 
-// --- COMPONENT 3: MAIN APP (The Switchboard) ---
+// --- MAIN APP (The Switchboard) ---
+
 function App() {
-  const handleSignOut = () => {
-  // 1. Remove the user from localStorage
-  localStorage.removeItem("fsu_user");
-  
-  // 2. Optional: Remove the cart if you want a fresh start on signout
-  // localStorage.removeItem("fsu_cart");
+  // Sync cart with LocalStorage so users don't lose items on refresh
+  const [cart, setCart] = useState(() => JSON.parse(localStorage.getItem("fsu_cart")) || []);
+  const user = JSON.parse(localStorage.getItem("fsu_user"));
 
-  // 3. Redirect to the home or login page to refresh the state
-  window.location.href = "/login";
-};
-  // Initialize cart fromm LocalStorage so it persists on refresh
-  const [cart, setCart] = useState(() => {
-    const savedCart = localStorage.getItem("fsu_cart");
-    return savedCart ? JSON.parse(savedCart) : [];
-  });
+  useEffect(() => { localStorage.setItem("fsu_cart", JSON.stringify(cart)); }, [cart]);
 
-  const userData = localStorage.getItem("fsu_user");
-  const user = userData ? JSON.parse(userData) : null;
-
-  // Save to localStorage everytime the cart changed
-  useEffect(() => {
-    localStorage.setItem("fsu_cart", JSON.stringify(cart));
-  }, [cart]);
-
+  // Main logic for adding to cart (includes stock check)
   const addToCart = (product) => {
-    setCart((prevCart) => [...prevCart, product]);
-    alert(`${product.name} added to cart!`);
-  }
-  const clearCart = () => {
-  if (window.confirm("Are you sure you want to clear your cart?")) {
-    setCart([]); // Sets the list back to empty
-  }
-};
-  const cartTotal = cart.reduce((sum, item) => sum + item.price, 0);
+    if (product.stock <= 0) return alert("Out of stock!");
+    setCart([...cart, product]);
+    alert("Added to cart!");
+  };
+
+  const handleSignOut = () => {
+    localStorage.removeItem("fsu_user");
+    window.location.href = "/login";
+  };
+
   return (
     <Router>
-      <nav style={{ 
-        padding: '20px', 
-        backgroundColor: '#333', 
-        color: 'white', 
-        display: 'flex', 
-        justifyContent: 'space-between',
-        position: 'sticky',
-        top: 0,
-        zIndex: 1000 
-      }}>
-        <Link to="/" style={{ color: 'white', textDecoration: 'none', fontWeight: 'bold' }}>
-          FSU BOBCAT SHOP
-        </Link>
-        <Link to="/orders">My Orders</Link>
-        {user?.email === 'jack.maust2005@gmail.com' && (
-  <Link to="/admin" style={{ color: 'red', fontWeight: 'bold' }}>Admin Panel</Link>
-)}
-        <div>
-         <Link to="/cart" style={{ color: '#FFD700', textDecoration: 'none', fontWeight: 'bold' }}>
-          🛒 Cart ({cart.length}) - ${cartTotal.toFixed(2)}
-        </Link>
+      <nav style={styles.nav}>
+        <Link to="/" style={{ color: 'white', textDecoration: 'none', fontWeight: '900' }}>FSU BOBCAT SHOP</Link>
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+          <Link to="/orders" style={{ color: 'white', textDecoration: 'none' }}>My Orders</Link>
+          {/* Only show Admin link if it's Jack's email */}
+          {user?.email === 'jack.maust2005@gmail.com' && <Link to="/admin" style={{ color: COLORS.secondary, textDecoration: 'none' }}>Admin</Link>}
+          <Link to="/cart" style={{ color: COLORS.secondary, textDecoration: 'none' }}>🛒 Cart ({cart.length})</Link>
+          {user ? (
+            <button onClick={handleSignOut} style={{ ...styles.button, padding: '5px 10px', backgroundColor: COLORS.primary, color: 'white' }}>Sign Out</button>
+          ) : <Link to="/login" style={{ color: 'white' }}>Login</Link>}
         </div>
-        {user ? (
-  <span style={{ marginRight: '15px' }}>{user ? (
-  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: '15px' }}>
-    <span style={{ color: 'white' }}>Hi, {user.email}</span>
-    <button 
-      onClick={handleSignOut} 
-      style={{ 
-        padding: '5px 10px', 
-        backgroundColor: '#BE1E2D', 
-        color: 'white', 
-        border: '1px solid white', 
-        borderRadius: '4px', 
-        cursor: 'pointer' 
-      }}
-    >
-      Sign Out
-    </button>
-  </div>
-) : (
-  <Link to="/login" style={{ color: 'white', marginLeft: '15px' }}>Login</Link>
-)}</span>
-) : (
-  <Link to="/login" style={{ color: 'white', marginRight: '15px' }}>Login</Link>
-)}
       </nav>
+
       <Routes>
+        <Route path="/" element={<Home addToCart={addToCart} />} />
         <Route path="/admin" element={<AdminPanel />} />
         <Route path="/login" element={<Login />} />
         <Route path="/orders" element={<OrderHistory />} />
-        <Route path="/" element={<Home addToCart={addToCart} />} />
         <Route path="/product/:id" element={<ProductDetail addToCart={addToCart}/>} />
-        <Route path="/cart" element={<Cart cart={cart} clearCart={clearCart} />} />
-        <Route path="/success" element={<SuccessPage cart={cart} clearCart={clearCart} />} />
+        <Route path="/cart" element={<Cart cart={cart} clearCart={() => setCart([])} />} />
+        <Route path="/success" element={<SuccessPage cart={cart} clearCart={() => setCart([])} />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/privacy" element={<Privacy />} />
       </Routes>
-      {/* Add this inside <Router> after <Routes> */}
-    <footer style={{ padding: '20px', backgroundColor: '#333', color: 'white', textAlign: 'center', marginTop: '40px' }}>
-       <Link to="/about" style={{ color: 'white', margin: '0 10px' }}>About Us</Link>
-        <Link to="/privacy" style={{ color: 'white', margin: '0 10px' }}>Privacy Policy</Link>
+
+      <footer style={{ padding: '40px', backgroundColor: COLORS.dark, color: 'white', textAlign: 'center' }}>
+        <Link to="/about" style={{ color: 'white', margin: '0 15px' }}>About</Link>
+        <Link to="/privacy" style={{ color: 'white', margin: '0 15px' }}>Privacy</Link>
         <p>© 2026 FSU Bobcat Shop</p>
       </footer>
     </Router>
   );
 }
 
+/**
+ * SUCCESS PAGE: Triggered after payment. Saves order to DB and deducts stock.
+ */
 function SuccessPage({ cart, clearCart }) {
   useEffect(() => {
-    const saveOrder = async () => {
-      // 1. Get the logged-in user's ID
-      const savedUser = JSON.parse(localStorage.getItem("fsu_user")); 
-      
-      if (cart.length > 0 && savedUser) {
-        try {
-          const total = cart.reduce((sum, item) => sum + item.price, 0);
-
-          // 2. Send the data to your 'orders' table
-          const { error } = await supabase
-            .from('orders')
-            .insert([{ 
-              user_id: savedUser.id, 
-              total_amount: total, 
-              items: cart 
-            }]);
-
-          if (error) {
-  console.error("SUPABASE ERROR:", error.message);
-  alert("Database Error: " + error.message); // This will tell you if types are wrong!
-} else {
-  console.log("Order saved!");
-  clearCart();
-}
-        } catch (err) {
-          console.error("Error saving order:", err);
-        }
-      }
-    };
-
-    saveOrder();
-  }, [cart, clearCart]);
+    const user = JSON.parse(localStorage.getItem("fsu_user"));
+    if (cart.length > 0 && user) {
+      // 1. Tell backend to reduce stock for purchased items
+      axios.post(`${API_BASE}/products/deduct-stock`, { cartItems: cart });
+      // 2. Save order details to Supabase for the user's history
+      const total = cart.reduce((sum, item) => sum + item.price, 0);
+      supabase.from('orders').insert([{ user_id: user.id, total_amount: total, items: cart }]).then(() => clearCart());
+    }
+  }, []);
 
   return (
-    <div style={{ textAlign: 'center', padding: '50px' }}>
-      <h1 style={{ color: 'green' }}>Order Confirmed! 🎉</h1>
-      <p>Check your Order History to see your new drip.</p>
-      <Link to="/">Continue Shopping</Link>
+    <div style={{ ...styles.container, textAlign: 'center' }}>
+      <h1 style={{ color: 'green' }}>Success! 🎉</h1>
+      <Link to="/">Back to Shop</Link>
     </div>
   );
 }
 
 function OrderHistory() {
   const [orders, setOrders] = useState([]);
-  const userData = localStorage.getItem("fsu_user");
-  const user = userData ? JSON.parse(userData) : null;
+  const user = JSON.parse(localStorage.getItem("fsu_user"));
 
   useEffect(() => {
-    const fetchOrders = async () => {
-      if (!user) return;
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-      if (error) console.error("History Error:", error);
-      setOrders(data || []);
-    };
-    fetchOrders();
-  }, [user]);
+    // Pull the logged-in user's orders from Supabase
+    if (user) supabase.from('orders').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).then(res => setOrders(res.data || []));
+  }, []);
 
-  // FIX: If NO user, tell them to login. Otherwise, show the orders.
-  if (!user) return <div style={{ padding: '40px' }}>Please log in to view your orders.</div>;
+  if (!user) return <div style={styles.container}>Log in to see orders.</div>;
 
   return (
-    <div style={{ padding: '40px' }}>
+    <div style={styles.container}>
       <h2>Your Order History</h2>
-      {orders.length === 0 ? <p>No orders yet. Go get some drip!</p> : (
-        orders.map(order => (
-          <div key={order.id} style={{ border: '1px solid #ddd', margin: '10px 0', padding: '15px' }}>
-            <p><strong>Date:</strong> {new Date(order.created_at).toLocaleDateString()}</p>
-            <p><strong>Total:</strong> ${order.total_amount.toFixed(2)}</p>
-            <ul>
-              {order.items.map((item, i) => <li key={i}>{item.name}</li>)}
-            </ul>
-          </div>
-        ))
-      )}
+      {orders.map(order => (
+        <div key={order.id} style={{ ...styles.card, marginBottom: '20px' }}>
+          <p><strong>Date:</strong> {new Date(order.created_at).toLocaleDateString()}</p>
+          <p><strong>Total:</strong> ${order.total_amount.toFixed(2)}</p>
+          <p><strong>Items:</strong> {order.items.map(i => i.name).join(', ')}</p>
+        </div>
+      ))}
     </div>
   );
 }
 
 function Login() {
   const [email, setEmail] = useState('');
-
   const handleLogin = () => {
-  // 1. Basic validation to make sure they didn't leave it blank
-  if (!email || !email.includes('@')) {
-    alert("Please enter a valid FSU email address!");
-    return;
-  }
-
-  // 2. Create the user object
-  // NOTE: I'm using a numeric ID here just in case you haven't 
-  // changed your Supabase 'user_id' column to 'text' yet.
-  const newUser = { 
-    id: Math.floor(Math.random() * 10000000), // Generates a random number
-    email: email 
+    if (!email.includes('@')) return alert("Enter valid email");
+    // Mock login: generates a fake user ID and saves to localstorage
+    localStorage.setItem("fsu_user", JSON.stringify({ id: Math.floor(Math.random() * 1000000), email }));
+    window.location.href = "/";
   };
-
-  // 3. Save to localStorage so the rest of the app "sees" the user
-  localStorage.setItem("fsu_user", JSON.stringify(newUser));
-
-  // 4. Feedback for the user
-  if (email === 'jack.maust2005@gmail.com') {
-    alert("Admin Access Granted. Welcome back, Jack.");
-  } else {
-    alert(`Logged in as ${email}`);
-  }
-
-  // 5. Force a redirect to Home to refresh the Navbar and 'My Orders' state
-  window.location.href = "/";
-};
-
   return (
-    <div style={{ padding: '50px', textAlign: 'center' }}>
-      <h1>FSU Student Login</h1>
-      <input 
-        type="email" 
-        placeholder="Enter your student email" 
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        style={{ padding: '10px', width: '300px', borderRadius: '5px' }}
-      />
-      <br /><br />
-      <button onClick={handleLogin} style={{ padding: '10px 20px', backgroundColor: '#BE1E2D', color: 'white', border: 'none', cursor: 'pointer' }}>
-        Login
-      </button>
+    <div style={{ ...styles.container, textAlign: 'center' }}>
+      <input style={styles.input} type="email" placeholder="FSU Email" value={email} onChange={e => setEmail(e.target.value)} />
+      <button onClick={handleLogin} style={{ ...styles.button, backgroundColor: COLORS.primary, color: 'white' }}>Enter Shop</button>
     </div>
   );
 }
+
+function About() { return <div style={styles.container}><h1>About FSU Bobcat Shop</h1><p>Student gear by students.</p></div>; }
+function Privacy() { return <div style={styles.container}><h1>Privacy Policy</h1><p>Secure payments via Stripe.</p></div>; }
 
 export default App;
