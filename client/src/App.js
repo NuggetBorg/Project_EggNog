@@ -12,7 +12,10 @@ const supabase = createClient(
 );
 
 // Centralized API URL and Theme Colors to make changes easy later
-const API_BASE = 'http://localhost:5000/api';
+// This automatically detects if you are on localhost or on the live web
+const API_BASE = window.location.origin.includes('localhost') 
+  ? 'http://localhost:5000/api' 
+  : '/api';
 const COLORS = {
   primary: '#BE1E2D',   // FSU Red
   secondary: '#FFD700', // Gold
