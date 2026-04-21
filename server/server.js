@@ -107,7 +107,7 @@ app.delete("/api/products/:id", async (req, res) => {
 });
 
 //const PORT = process.env.PORT || 5000;
-module.exports = app; // Add this instead
+
 app.post("/api/products/deduct-stock", async (req, res) => {
   const { cartItems } = req.body;
 
@@ -174,3 +174,4 @@ app.put("/api/admin/orders/:id/status", async (req, res) => {
   if (error) return res.status(400).json({ error: error.message });
   res.json(data);
 });
+module.exports = app; // Add this instead
