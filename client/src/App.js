@@ -13,7 +13,7 @@ const supabase = createClient(
 
 // Centralized API URL and Theme Colors to make changes easy later
 // This automatically detects if you are on localhost or on the live web
-const API_BASE = window.location.origin.includes('localhost') 
+const API_BASE = window.location.hostname === 'localhost'
   ? 'http://localhost:5000/api' 
   : '/api';
 const COLORS = {
