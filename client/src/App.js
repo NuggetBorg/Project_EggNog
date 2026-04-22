@@ -444,7 +444,7 @@ function Login() {
   );
 }
 
-function About() { return <div style={styles.container}><h1>About FSU Bobcat Shop</h1><p>Student gear by students.</p></div>; }
-function Privacy() { return <div style={styles.container}><h1>Privacy Policy</h1><p>Secure payments via Stripe.</p></div>; }
+function About() { return <div style={styles.container}><h1>About FSU Bobcat Shop</h1><p>We are a student-run online store dedicated to bringing you the best Frostburg State University merchandise. Whether you're a current student, proud alumni, or a Bobcat fan, our store has everything you need to show your FSU spirit. From apparel to accessories, all of our products are carefully selected to represent the pride and tradition of Frostburg State University. Every purchase supports our passion for the FSU community — go Bobcats!</p></div>; }
+function Privacy() { return <div style={styles.container}><h1>Privacy Policy</h1><p>Your privacy is important to us. We collect only the information necessary to process your order, including your name, email address, and payment details. Payment processing is handled securely through Stripe and we never store your credit card information on our servers. Your personal information will never be sold or shared with third parties. By using this site you agree to the collection and use of your information solely for the purpose of fulfilling your order and improving your shopping experience. If you have any questions about your data, please reach out to us directly.</p></div>; }
 
 export default App;
